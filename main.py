@@ -8,13 +8,14 @@ from keras.optimizers import Adam
 import tensorflow as tf
 
 EPISODES = 1000
+PLAY = True
 
 
 class DQNAgent:
     def __init__(self, state_size, action_size):
         self.state_size = state_size
         self.action_size = action_size
-        self.memory = deque(maxlen=500)
+        self.memory = deque(maxlen=2000)
         self.gamma = 0.95    # discount rate
         self.epsilon = 1.0  # exploration rate
         self.epsilon_min = 0.01
@@ -29,14 +30,14 @@ class DQNAgent:
         model.add(Dense(24, activation='relu'))
         model.add(Dense(self.action_size, activation='linear'))
         model.compile(loss='mse',
-                      optimizer=Adam(lr=self.learning_rate))
+                        optimizer=Adam(lr=self.learning_rate))
         return model
 
     def remember(self, state, action, reward, next_state, done):
         self.memory.append((state, action, reward, next_state, done))
 
     def act(self, state):
-        if np.random.rand() <= self.epsilon:
+        if np.random.rand() <= self.epsilon and not PLAY:
             return random.randrange(self.action_size)
         act_values = self.model.predict(state)
         return np.argmax(act_values[0])  # returns action
@@ -47,7 +48,7 @@ class DQNAgent:
             target = reward
             if not done:
                 target = (reward + self.gamma *
-                          np.amax(self.model.predict(next_state)[0]))
+                            np.amax(self.model.predict(next_state)[0]))
             target_f = self.model.predict(state)
             target_f[0][action] = target
             self.model.fit(state, target_f, epochs=1, verbose=0)
@@ -65,25 +66,28 @@ if __name__ == "__main__":
     state_size = env.observation_space.shape[0]
     action_size = env.action_space.n
     agent = DQNAgent(state_size, action_size)
-    # agent.load("./cartpole-dqn.h5")
+    if PLAY:
+        agent.load("./cartpole-dqn.h5")
     batch_size = 32
 
     for e in range(EPISODES):
         state = env.reset()
         state = np.reshape(state, [1, state_size])
-        for time in range(2000):
-            # env.render()
+        for time in range(500):
+            if PLAY:
+                env.render()
             action = agent.act(state)
             next_state, reward, done, _ = env.step(action)
             reward = reward if not done else -10
             next_state = np.reshape(next_state, [1, state_size])
-            agent.remember(state, action, reward, next_state, done)
+            if not PLAY:
+                agent.remember(state, action, reward, next_state, done)
             state = next_state
             if done:
                 print("episode: {}/{}, score: {}, e: {:.2}"
-                      .format(e, EPISODES, time, agent.epsilon))
+                        .format(e, EPISODES, time, agent.epsilon))
                 break
-            if len(agent.memory) > batch_size:
+            if len(agent.memory) > batch_size and not PLAY:
                 agent.replay(batch_size)
-        if e % 20 == 0:
+        if e % 20 == 0 and not PLAY:
             agent.save("./cartpole-dqn.h5")
